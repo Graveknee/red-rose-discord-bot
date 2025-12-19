@@ -1,6 +1,10 @@
 import type { sheets_v4 } from "googleapis";
 import { normalize } from "../util/text.js";
 import { COLS, type RegistryRow } from "./schema.js";
+import { checkCharacterGuild } from "../tibia/tibiadata.js";
+import { setCellBackground } from "./formatting.js";
+
+const GUILD_NAME = "Red Rose";
 
 function tabRange(sheetTab: string, a1: string) {
   return `'${sheetTab}'!${a1}`;
@@ -112,6 +116,7 @@ export async function registerAltsBulk(params: {
 
   if (!row) {
     const [a1 = "", a2 = "", a3 = ""] = altsInput.slice(0, 3);
+
     await sheets.spreadsheets.values.append({
       spreadsheetId,
       range: tabRange(sheetTab, "A:H"),
@@ -122,12 +127,26 @@ export async function registerAltsBulk(params: {
       },
     });
 
+    const allAfter = await readAllRows({ sheets, spreadsheetId, sheetTab });
+    const appended = allAfter
+      .filter(r => r.discordUserId === params.discordUserId)
+      .find(r => normalize(r.main) === normalize(main));
+
+    if (appended) {
+      await validateAndColor({ sheets, spreadsheetId, sheetTab, a1: `A${appended.rowIndex}`, characterName: appended.main });
+
+      if (appended.alt1) await validateAndColor({ sheets, spreadsheetId, sheetTab, a1: `B${appended.rowIndex}`, characterName: appended.alt1 });
+      if (appended.alt2) await validateAndColor({ sheets, spreadsheetId, sheetTab, a1: `C${appended.rowIndex}`, characterName: appended.alt2 });
+      if (appended.alt3) await validateAndColor({ sheets, spreadsheetId, sheetTab, a1: `D${appended.rowIndex}`, characterName: appended.alt3 });
+    }
+
     const used = [a1, a2, a3].filter(Boolean);
     const ignored = altsInput.length > 3 ? altsInput.slice(3) : [];
+
     return {
       ok: true,
       message:
-        `✅ Registered under **${main}**: ${used.map(x => `**${x}**`).join(", ")}.` +
+        `Registered under **${main}**: ${used.map(x => `**${x}**`).join(", ")}.` +
         (ignored.length ? `\nIgnored (max 3): ${ignored.map(x => `**${x}**`).join(", ")}` : ""),
     };
   }
@@ -155,11 +174,21 @@ export async function registerAltsBulk(params: {
 
   for (let i = 0; i < willWrite.length; i++) {
     const col = free[i];
+    const a1 = `${col}${row.rowIndex}`;
+
     await sheets.spreadsheets.values.update({
       spreadsheetId,
-      range: tabRange(sheetTab, `${col}${row.rowIndex}`),
+      range: tabRange(sheetTab, a1),
       valueInputOption: "USER_ENTERED",
       requestBody: { values: [[willWrite[i]]] },
+    });
+
+    await validateAndColor({
+      sheets,
+      spreadsheetId,
+      sheetTab,
+      a1,
+      characterName: willWrite[i],
     });
   }
 
@@ -338,6 +367,14 @@ export async function fixAltName(params: {
     requestBody: { values: [[newTrim]] },
   });
 
+  await validateAndColor({
+    sheets,
+    spreadsheetId,
+    sheetTab,
+    a1: `${col}${row.rowIndex}`,
+    characterName: newTrim,
+  });
+
   return { ok: true, message: `Renamed alt **${params.oldName}** → **${newTrim}** (main: **${row.main}**).` };
 }
 
@@ -376,5 +413,36 @@ export async function fixMainName(params: {
     requestBody: { values: [[newTrim]] },
   });
 
+  await validateAndColor({
+    sheets,
+    spreadsheetId,
+    sheetTab,
+    a1: `A${row.rowIndex}`,
+    characterName: newTrim,
+  });
+
   return { ok: true, message: `Renamed main **${params.oldName}** → **${newTrim}**.` };
+}
+
+async function validateAndColor(params: {
+  sheets: sheets_v4.Sheets;
+  spreadsheetId: string;
+  sheetTab: string;
+  a1: string;
+  characterName: string;
+}) {
+  const result = await checkCharacterGuild(params.characterName);
+
+  if (!result.ok) {
+    await setCellBackground({ ...params, color: "gray" });
+    return;
+  }
+
+  if (!result.exists) {
+    await setCellBackground({ ...params, color: "red" });
+    return;
+  }
+
+  const inGuild = (result.guildName ?? "").toLowerCase() === GUILD_NAME.toLowerCase();
+  await setCellBackground({ ...params, color: inGuild ? "green" : "red" });
 }

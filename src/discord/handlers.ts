@@ -4,11 +4,23 @@ import { config } from "../config.js";
 import { getSheetsClient } from "../sheets/client.js";
 import { listAltsForUser, fixAltName, fixMainName, removeAltForUser, registerAltsBulk, whoisCharacter, searchCharacters } from "../sheets/registry.js";
 
-function replyEphemeral(interaction: ChatInputCommandInteraction, content: string) {
-  return interaction.reply({ content, flags: MessageFlags.Ephemeral });
+async function deferEphemeral(interaction: ChatInputCommandInteraction) {
+  if (!interaction.deferred && !interaction.replied) {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  }
+}
+
+async function finish(interaction: ChatInputCommandInteraction, content: string) {
+  if (interaction.deferred || interaction.replied) {
+    await interaction.editReply({ content });
+  } else {
+    await interaction.reply({ content, flags: MessageFlags.Ephemeral });
+  }
 }
 
 export async function handleInteraction(interaction: ChatInputCommandInteraction): Promise<void> {
+  await deferEphemeral(interaction);
+
   const sheets = getSheetsClient(config.google.serviceAccountJsonPath);
 
   if (interaction.commandName === "register") {
@@ -30,7 +42,7 @@ export async function handleInteraction(interaction: ChatInputCommandInteraction
       discordUserId,
     });
 
-    await replyEphemeral(interaction, result.message);
+    await finish(interaction, result.message);
     return;
   }
 
@@ -42,7 +54,7 @@ export async function handleInteraction(interaction: ChatInputCommandInteraction
       sheetTab: config.google.sheetTab,
       character,
     });
-    await replyEphemeral(interaction, text);
+    await finish(interaction, text);
     return;
   }
 
@@ -55,7 +67,7 @@ export async function handleInteraction(interaction: ChatInputCommandInteraction
       query,
       limit: 10,
     });
-    await replyEphemeral(interaction, text);
+    await finish(interaction, text);
     return;
   }
 
@@ -72,7 +84,7 @@ export async function handleInteraction(interaction: ChatInputCommandInteraction
       newName,
     });
 
-    await replyEphemeral(interaction, result.message);
+    await finish(interaction, result.message);
     return;
   }
 
@@ -89,7 +101,7 @@ export async function handleInteraction(interaction: ChatInputCommandInteraction
       newName,
     });
 
-    await replyEphemeral(interaction, result.message);
+    await finish(interaction, result.message);
     return;
   }
 
@@ -104,7 +116,7 @@ export async function handleInteraction(interaction: ChatInputCommandInteraction
       discordUserId: userId,
     });
 
-    await replyEphemeral(interaction, text);
+    await finish(interaction, text);
     return;
   }
 
@@ -121,9 +133,9 @@ export async function handleInteraction(interaction: ChatInputCommandInteraction
       alt,
     });
 
-    await replyEphemeral(interaction, result.message);
+    await finish(interaction, result.message);
     return;
   }
 
-  await replyEphemeral(interaction, "Unknown command.");
+  await finish(interaction, "Unknown command.");
 }
