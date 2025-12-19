@@ -18,6 +18,8 @@ async function getSheetIdByTitle(params: {
   return id;
 }
 
+export type CellColor = "green" | "red" | "gray";
+
 function a1ToGrid(a1: string): { col: number; row: number } {
   const match = /^([A-Z]+)(\d+)$/i.exec(a1.trim());
   if (!match) throw new Error(`Invalid A1: ${a1}`);
@@ -26,10 +28,45 @@ function a1ToGrid(a1: string): { col: number; row: number } {
   const rowNum = parseInt(match[2]!, 10);
 
   let colNum = 0;
-  for (let i = 0; i < letters.length; i++) {
-    colNum = colNum * 26 + (letters.charCodeAt(i) - 64);
-  }
+  for (let i = 0; i < letters.length; i++) colNum = colNum * 26 + (letters.charCodeAt(i) - 64);
+
   return { col: colNum - 1, row: rowNum - 1 };
+}
+
+export async function createCellFormatter(params: {
+  sheets: sheets_v4.Sheets;
+  spreadsheetId: string;
+  sheetTab: string;
+}) {
+  const sheetId = await getSheetIdByTitle(params);
+
+  async function setCellBackground(a1: string, color: CellColor) {
+    const { row, col } = a1ToGrid(a1);
+    const rgb = color === "green" ? LIGHT_GREEN : color === "red" ? LIGHT_RED : LIGHT_GRAY;
+
+    await params.sheets.spreadsheets.batchUpdate({
+      spreadsheetId: params.spreadsheetId,
+        requestBody: {
+          requests: [
+            {
+              repeatCell: {
+                range: {
+                  sheetId,
+                  startRowIndex: row,
+                  endRowIndex: row + 1,
+                  startColumnIndex: col,
+                  endColumnIndex: col + 1,
+                },
+                cell: { userEnteredFormat: { backgroundColor: rgb } },
+                fields: "userEnteredFormat.backgroundColor",
+              },
+            },
+          ],
+        },
+      });
+    }
+
+  return { setCellBackground };
 }
 
 export async function setCellBackground(params: {
@@ -38,34 +75,12 @@ export async function setCellBackground(params: {
   sheetTab: string;
   a1: string;
   color: "green" | "red" | "gray";
-}): Promise<void> {
-  const sheetId = await getSheetIdByTitle(params);
-  const { row, col } = a1ToGrid(params.a1);
-
-  const rgb = params.color === "green" ? LIGHT_GREEN : params.color === "red" ? LIGHT_RED : LIGHT_GRAY;
-
-  await params.sheets.spreadsheets.batchUpdate({
+}) {
+  const formatter = await createCellFormatter({
+    sheets: params.sheets,
     spreadsheetId: params.spreadsheetId,
-    requestBody: {
-      requests: [
-        {
-          repeatCell: {
-            range: {
-              sheetId,
-              startRowIndex: row,
-              endRowIndex: row + 1,
-              startColumnIndex: col,
-              endColumnIndex: col + 1,
-            },
-            cell: {
-              userEnteredFormat: {
-                backgroundColor: rgb,
-              },
-            },
-            fields: "userEnteredFormat.backgroundColor",
-          },
-        },
-      ],
-    },
+    sheetTab: params.sheetTab,
   });
+
+  await formatter.setCellBackground(params.a1, params.color);
 }

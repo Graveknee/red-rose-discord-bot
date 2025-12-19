@@ -3,6 +3,8 @@ import { MessageFlags } from "discord.js";
 import { config } from "../config.js";
 import { getSheetsClient } from "../sheets/client.js";
 import { listAltsForUser, fixAltName, fixMainName, removeAltForUser, registerAltsBulk, whoisCharacter, searchCharacters } from "../sheets/registry.js";
+import { auditGuildAndColor } from "../sheets/audit.js";
+import { sendAltInviteRequest } from "./request.js";
 
 async function deferEphemeral(interaction: ChatInputCommandInteraction) {
   if (!interaction.deferred && !interaction.replied) {
@@ -22,6 +24,39 @@ export async function handleInteraction(interaction: ChatInputCommandInteraction
   await deferEphemeral(interaction);
 
   const sheets = getSheetsClient(config.google.serviceAccountJsonPath);
+
+  if (interaction.commandName === "auditguild") {
+    const stats = await auditGuildAndColor({
+      sheets,
+      spreadsheetId: config.google.sheetId,
+      sheetTab: config.google.sheetTab,
+      guildName: config.tibia.guildName,
+      throttleMs: config.tibia.auditThrottleMs,
+    });
+
+    await finish(
+      interaction,
+      `✅ Audit complete.\nChecked: **${stats.total}** cells\n` +
+        `🟩 In guild: **${stats.green}**\n🟥 Not in guild / missing: **${stats.red}**\n⬜ Unknown/error: **${stats.gray}**`
+    );
+    return;
+  }
+
+  if (interaction.commandName === "request") {
+    const main = interaction.options.getString("maincharacter", true).trim();
+    const alt = interaction.options.getString("alt", true).trim();
+
+    await sendAltInviteRequest({
+      client: interaction.client,
+      adminChannelId: config.discord.adminChannelId,
+      main,
+      alt,
+      requesterId: interaction.user.id,
+    });
+
+    await finish(interaction, `✅ Request sent to admins: **${main}** wants **${alt}** invited as an alt.`);
+    return;
+  }
 
   if (interaction.commandName === "register") {
     const main = interaction.options.getString("maincharacter", true);

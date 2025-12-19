@@ -59,5 +59,15 @@ export const commandData = [
     .setDescription("Rename one of your mains (typo fix).")
     .addStringOption(o => o.setName("old").setDescription("Old main name").setRequired(true))
     .addStringOption(o => o.setName("new").setDescription("New main name").setRequired(true)),
-].map(c => c.toJSON());
+
+  new SlashCommandBuilder()
+    .setName("auditguild")
+    .setDescription("Audit sheet characters against Tibia guild membership and color cells."),
+
+  new SlashCommandBuilder()
+    .setName("request")
+    .setDescription("Request an alt invite to the guild (posts to admin channel).")
+    .addStringOption(o => o.setName("maincharacter").setDescription("Your main character").setRequired(true))
+    .addStringOption(o => o.setName("alt").setDescription("Alt to invite").setRequired(true)),
+  ].map(c => c.toJSON());
 
