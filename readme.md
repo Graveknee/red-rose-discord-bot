@@ -37,19 +37,6 @@ src/util
 
 ---
 
-## ▶Running the Bot
-
-npm install  
-npm run dev
-
-The bot will:
-
-1. Register slash commands
-2. Log into Discord
-3. Listen for interactions
-
----
-
 ## Discord Commands
 
 /register  
