@@ -5,6 +5,7 @@ type RGB = { red: number; green: number; blue: number };
 const LIGHT_GREEN: RGB = { red: 0.85, green: 0.95, blue: 0.85 };
 const LIGHT_RED: RGB = { red: 0.98, green: 0.85, blue: 0.85 };
 const LIGHT_GRAY: RGB = { red: 0.92, green: 0.92, blue: 0.92 };
+const WHITE: RGB = { red: 1, green: 1, blue: 1 };
 
 async function getSheetIdByTitle(params: {
   sheets: sheets_v4.Sheets;
@@ -18,7 +19,7 @@ async function getSheetIdByTitle(params: {
   return id;
 }
 
-export type CellColor = "green" | "red" | "gray";
+export type CellColor = "green" | "red" | "gray" | "clear";
 
 function a1ToGrid(a1: string): { col: number; row: number } {
   const match = /^([A-Z]+)(\d+)$/i.exec(a1.trim());
@@ -42,7 +43,12 @@ export async function createCellFormatter(params: {
 
   async function setCellBackground(a1: string, color: CellColor) {
     const { row, col } = a1ToGrid(a1);
-    const rgb = color === "green" ? LIGHT_GREEN : color === "red" ? LIGHT_RED : LIGHT_GRAY;
+    const rgb = 
+      color === "green" ? LIGHT_GREEN : 
+      color === "red" ? LIGHT_RED : 
+      color === "gray" ? LIGHT_GRAY : 
+      color === "clear" ? WHITE : 
+      WHITE ;
 
     await params.sheets.spreadsheets.batchUpdate({
       spreadsheetId: params.spreadsheetId,
@@ -74,7 +80,7 @@ export async function setCellBackground(params: {
   spreadsheetId: string;
   sheetTab: string;
   a1: string;
-  color: "green" | "red" | "gray";
+  color: "green" | "red" | "gray" | "clear";
 }) {
   const formatter = await createCellFormatter({
     sheets: params.sheets,

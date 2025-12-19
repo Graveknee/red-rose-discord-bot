@@ -325,6 +325,14 @@ export async function removeAltForUser(params: {
     requestBody: { values: [[""]] },
   });
 
+  await setCellBackground({
+    sheets,
+    spreadsheetId,
+    sheetTab,
+    a1: `${col}${row.rowIndex}`,
+    color: "clear",
+  });
+
   return { ok: true, message: `Removed alt **${params.alt}** from **${row.main}**.` };
 }
 
