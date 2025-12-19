@@ -73,6 +73,95 @@ function uniqueNonEmpty(names: string[]): string[] {
   return out;
 }
 
+export async function requestAltAndReturnCell(params: {
+  sheets: sheets_v4.Sheets;
+  spreadsheetId: string;
+  sheetTab: string;
+  main: string;
+  alt: string;
+  discordUser: string;
+  discordUserId: string;
+}): Promise<
+  | { ok: true; message: string; rowIndex: number; col: "B" | "C" | "D"; main: string; alt: string }
+  | { ok: false; message: string }
+> {
+  const { sheets, spreadsheetId, sheetTab } = params;
+
+  const main = params.main.trim();
+  const alt = params.alt.trim();
+
+  if (!main) return { ok: false, message: "Main must be provided." };
+  if (!alt) return { ok: false, message: "Alt must be provided." };
+
+  const all = await readAllRows({ sheets, spreadsheetId, sheetTab });
+
+  let row = all.find(r => r.discordUserId === params.discordUserId && normalize(r.main) === normalize(main));
+
+  const existingMainOwner = findCharacterOwner(all, main);
+  if (existingMainOwner && (!row || existingMainOwner.row.rowIndex !== row.rowIndex)) {
+    return {
+      ok: false,
+      message: `**${main}** is already registered under **${existingMainOwner.row.main}** (owner <@${existingMainOwner.row.discordUserId}>).`,
+    };
+  }
+
+  const existingAltOwner = findCharacterOwner(all, alt);
+  if (existingAltOwner && (!row || existingAltOwner.row.rowIndex !== row.rowIndex)) {
+    return {
+      ok: false,
+      message: `**${alt}** is already registered under **${existingAltOwner.row.main}** (owner <@${existingAltOwner.row.discordUserId}>).`,
+    };
+  }
+
+  const now = new Date().toISOString();
+
+  if (!row) {
+    await sheets.spreadsheets.values.append({
+      spreadsheetId,
+      range: tabRange(sheetTab, "A:H"),
+      valueInputOption: "USER_ENTERED",
+      insertDataOption: "INSERT_ROWS",
+      requestBody: {
+        values: [[main, alt, "", "", params.discordUser, params.discordUserId, now, ""]],
+      },
+    });
+
+    const allAfter = await readAllRows({ sheets, spreadsheetId, sheetTab });
+    row = allAfter.find(r => r.discordUserId === params.discordUserId && normalize(r.main) === normalize(main));
+    if (!row) return { ok: false, message: "Failed to locate created row after append." };
+
+    await setCellBackground({ sheets, spreadsheetId, sheetTab, a1: `B${row.rowIndex}`, color: "gray" });
+
+    return { ok: true, message: `Requested **${alt}** under **${main}**.`, rowIndex: row.rowIndex, col: "B", main, alt };
+  }
+
+  if (altsOf(row).map(normalize).includes(normalize(alt))) {
+    return { ok: false, message: `**${alt}** is already listed under **${main}**.` };
+  }
+
+  const slots: Array<{ col: "B" | "C" | "D"; value: string }> = [
+    { col: "B", value: row.alt1 },
+    { col: "C", value: row.alt2 },
+    { col: "D", value: row.alt3 },
+  ];
+
+  const free = slots.find(s => !s.value);
+  if (!free) return { ok: false, message: `**${main}** already has 3 alts. Remove one first.` };
+
+  const a1 = `${free.col}${row.rowIndex}`;
+
+  await sheets.spreadsheets.values.update({
+    spreadsheetId,
+    range: tabRange(sheetTab, a1),
+    valueInputOption: "USER_ENTERED",
+    requestBody: { values: [[alt]] },
+  });
+
+  await setCellBackground({ sheets, spreadsheetId, sheetTab, a1, color: "gray" });
+
+  return { ok: true, message: `Requested **${alt}** under **${main}**.`, rowIndex: row.rowIndex, col: free.col, main, alt };
+}
+
 export async function registerAltsBulk(params: {
   sheets: sheets_v4.Sheets;
   spreadsheetId: string;

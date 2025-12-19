@@ -2,9 +2,9 @@ import type { ChatInputCommandInteraction } from "discord.js";
 import { MessageFlags } from "discord.js";
 import { config } from "../config.js";
 import { getSheetsClient } from "../sheets/client.js";
-import { listAltsForUser, fixAltName, fixMainName, removeAltForUser, registerAltsBulk, whoisCharacter, searchCharacters } from "../sheets/registry.js";
+import { listAltsForUser, requestAltAndReturnCell, fixAltName, fixMainName, removeAltForUser, registerAltsBulk, whoisCharacter, searchCharacters } from "../sheets/registry.js";
 import { auditGuildAndColor } from "../sheets/audit.js";
-import { sendAltInviteRequest } from "./request.js";
+import { postRequestToAdmins } from "./request.js";
 
 async function deferEphemeral(interaction: ChatInputCommandInteraction) {
   if (!interaction.deferred && !interaction.replied) {
@@ -43,18 +43,39 @@ export async function handleInteraction(interaction: ChatInputCommandInteraction
   }
 
   if (interaction.commandName === "request") {
-    const main = interaction.options.getString("maincharacter", true).trim();
-    const alt = interaction.options.getString("alt", true).trim();
+    await deferEphemeral(interaction);
 
-    await sendAltInviteRequest({
-      client: interaction.client,
-      adminChannelId: config.discord.adminChannelId,
+    const main = interaction.options.getString("maincharacter", true);
+    const alt = interaction.options.getString("alt", true);
+
+    const discordUserId = interaction.user.id;
+    const discordUser = interaction.user.tag ?? interaction.user.username;
+
+    const res = await requestAltAndReturnCell({
+      sheets,
+      spreadsheetId: config.google.sheetId,
+      sheetTab: config.google.sheetTab,
       main,
       alt,
-      requesterId: interaction.user.id,
+      discordUser,
+      discordUserId,
     });
 
-    await finish(interaction, `✅ Request sent to admins: **${main}** wants **${alt}** invited as an alt.`);
+    if (!res.ok) {
+      await finish(interaction, `${res.message}`);
+      return;
+    }
+
+    await postRequestToAdmins({
+      client: interaction.client,
+      requesterId: discordUserId,
+      main: res.main,
+      alt: res.alt,
+      rowIndex: res.rowIndex,
+      col: res.col,
+    });
+
+    await finish(interaction, `Request sent. Admins will accept/deny **${res.alt}**.`);
     return;
   }
 

@@ -2,6 +2,7 @@ import { Client, GatewayIntentBits } from "discord.js";
 import { config } from "./config.js";
 import { registerSlashCommands } from "./discord/registerCommands.js";
 import { handleInteraction } from "./discord/handlers.js";
+import { handleButton } from "./discord/buttons.js";
 
 async function main() {
   await registerSlashCommands();
@@ -10,14 +11,20 @@ async function main() {
 
   client.on("interactionCreate", async (interaction) => {
     try {
-      if (!interaction.isChatInputCommand()) return;
-      await handleInteraction(interaction);
+      if (interaction.isChatInputCommand()) {
+        await handleInteraction(interaction);
+        return;
+      }
+
+      if (interaction.isButton()) {
+        await handleButton(interaction);
+        return;
+      }
     } catch (err) {
-      console.error(err);
-      if (interaction.isRepliable()) {
-        await interaction.reply({
-          content: "❌ Something went wrong.",
-        }).catch(() => {});
+      console.error("interactionCreate error:", err);
+
+      if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) {
+        await interaction.reply({ content: "❌ Something went wrong." }).catch(() => {});
       }
     }
   });
